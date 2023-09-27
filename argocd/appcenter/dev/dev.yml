@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kuber-api-app
+  namespace: argocd
+spec:
+  destination:
+    namespace: app
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: deploy
+    repoURL: https://github.com/yura-kutsiy/hub
+    targetRevision: 0.2.0
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
