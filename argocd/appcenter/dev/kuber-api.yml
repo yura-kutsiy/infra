@@ -11,8 +11,8 @@ spec:
   source:
     path: deploy
     repoURL: https://github.com/yura-kutsiy/hub
-    targetRevision: "0.3.2"
+    targetRevision: "dev"
   syncPolicy:
     automated:
-      selfHeal: true
+      selfHeal: false
       prune: true
