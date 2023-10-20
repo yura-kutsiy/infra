@@ -1,0 +1,109 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: kaniko-build
+  namespace: default
+spec:
+
+  arguments:
+    parameters:
+    - name: repourl
+      value: repo
+    - name: branch
+      value: branch
+
+  volumeClaimTemplates:
+  - metadata:
+      name: repository
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 64Mi
+  volumes:
+    - name: kaniko-secret
+      secret:
+        secretName: docker-registry
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+
+  entrypoint: ci-stage
+  templates:
+  - name: ci-stage
+    steps:
+
+    - - name: clone-repo
+        template: clone
+    - - name: build-main
+        template: build-image
+        arguments:
+          parameters:
+            - name: dockerFile
+              value: "Dockerfile"
+    - - name: list
+        template: ls
+
+  - name: ls
+    script:
+      volumeMounts:
+        - mountPath: /workdir
+          name: repository
+      image: alpine/git:v2.40.1
+      command: [sh]
+      source: |
+        ls -al
+        pwd
+        ls -al /workdir
+        cd /workdir/repo
+        ls -al
+
+  - name: clone
+    container:
+      volumeMounts:
+        - mountPath: /workdir
+          name: repository
+      workingDir: /workdir
+      image: alpine/git:v2.40.1
+      args:
+        - clone
+        - --depth
+        - "1"
+        - --branch
+        - "{{workflow.parameters.branch}}"
+        - --single-branch
+        - "{{workflow.parameters.repourl}}"
+        - .
+  - name: build-image
+    inputs:
+      parameters:
+        - name: dockerFile
+        - name: arch
+    container:
+      image: gcr.io/kaniko-project/executor:v1.15.0-debug
+      # imagePullPolicy: Always
+      command: ["/kaniko/executor"]
+      args:
+        [
+          "--dockerfile=./{{inputs.parameters.dockerFile}}",
+          "--context=/workdir/repo/",
+          "--snapshot-mode=full",
+          "--destination=repo/repo:tag{{inputs.parameters.arch}}",
+          "--cache=true",
+          "--cache-run-layers",
+          "--cache-copy-layers",
+          "--cache-repo=yurasdockers/kuberapi-cache",
+        ]
+      volumeMounts:
+        - name: kaniko-secret
+          mountPath: /kaniko/.docker/
+        - name: repository
+          mountPath: /workdir/repo
+      resources:
+        limits:
+          cpu: 400m
+          memory: 400Mi
+
+
+###################################################################
+# revision: "{{workflow.parameters.revision}}"

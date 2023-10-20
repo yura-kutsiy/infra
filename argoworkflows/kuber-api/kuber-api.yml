@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: kuber-api
+  namespace: default
+spec:
+spec:
+  arguments:
+    parameters:
+      - name: repo
+        valueFrom:
+          configMapKeyRef:
+            name: parameters-kuber-api
+            key: kuberAPIrepo
+      - name: imageRegistry
+        valueFrom:
+          configMapKeyRef:
+            name: parameters-kuber-api
+            key: imageRegistry
+      - name: branch
+        value: "branch"
+      - name: imageTag
+        value: "tag"
+      - name: push
+        value: "true"
+        enum:
+          - "true"
+          - "false"
+  volumeClaimTemplates:
+    - metadata:
+        name: work
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 300Mi
+  entrypoint: kuber-api
+  templates:
+    - name: kuber-api
+      steps:
+        - - name: clone
+            templateRef:
+              name: buildkit-builder
+              template: clone
+            arguments:
+              parameters:
+              - name: repo
+                value: "{{workflow.parameters.repo}}"
+              - name: branch
+                value: "{{workflow.parameters.branch}}"
+        - - name: build-image
+            templateRef:
+              name: buildkit-builder
+              template: build-image
+            arguments:
+              parameters:
+              - name: buildArtifact
+                value: "{{workflow.parameters.imageRegistry}}:{{workflow.parameters.imageTag}}"
+              - name: push
+                value: "true"

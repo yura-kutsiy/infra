@@ -1,0 +1,129 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: buildkit-builder
+  namespace: default
+spec:
+  arguments:
+    parameters:
+      - name: repo
+        value: repo
+      - name: branch
+        value: "branch"
+      - name: imageRegistry
+        value: registry
+      - name: imageTag
+        value: "tag"
+      - name: cacheRegistry
+        value: "-cache"
+      - name: push
+        value: "true"
+        enum:
+          - "true"
+          - "false"
+  volumeClaimTemplates:
+    - metadata:
+        name: work
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 300Mi
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: clone
+            template: clone
+            arguments:
+              parameters:
+                - name: repo
+                  value: "{{workflow.parameters.repo}}"
+                - name: branch
+                  value: "{{workflow.parameters.branch}}"
+          - name: build-image
+            template: build-image
+            arguments:
+              parameters:
+                - name: buildArtifact
+                  value: "{{workflow.parameters.imageRegistry}}:{{workflow.parameters.imageTag}}"
+                # - name: buildCache
+                #   value: "{{workflow.parameters.imageRegistry}}:{{workflow.parameters.cacheRegistry}}"
+            depends: "clone"
+
+    - name: clone
+      inputs:
+        parameters:
+          - name: repo
+          - name: branch
+      container:
+        volumeMounts:
+          - mountPath: /work
+            name: work
+        image: alpine/git:v2.26.2
+        workingDir: /work
+        # Do a shallow clone, which is the fastest way to clone, by using the
+        # --depth, --branch, and --single-branch options
+        args:
+          - clone
+          - --depth
+          - "1"
+          - --branch
+          - "{{inputs.parameters.branch}}"
+          - --single-branch
+          - "{{inputs.parameters.repo}}"
+          - .
+    - name: build-image
+      inputs:
+        parameters:
+          - name: buildArtifact
+          # - name: buildCache
+      volumes:
+        - name: docker-config
+          secret:
+            secretName: docker-registry
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+      # initContainers:
+      # - name: init-container
+      #   image: alpine:latest
+      #   command: ["mv", "/work/Dockerfile-arm", "/work/Dockerfile"]
+      #   mirrorVolumeMounts: true
+      container:
+        readinessProbe:
+          exec:
+            command: [ sh, -c, "buildctl debug workers" ]
+        image: moby/buildkit:master
+        volumeMounts: 
+          - name: work
+            mountPath: /work
+          - name: docker-config
+            mountPath: /.docker
+        workingDir: /work
+        env:
+          # - name: BUILDKITD_FLAGS
+          #   value: --oci-worker-no-process-sandbox
+          - name: DOCKER_CONFIG
+            value: /.docker
+        command:
+          - buildctl-daemonless.sh
+        args:
+          - build
+          - --frontend
+          - dockerfile.v0
+          - --local
+          - context=.
+          - --local
+          - dockerfile=.
+          # - --import-cache
+          # - type=registry,ref=docker.io/yurasdockers/kuberapi-cache
+          # - --export-cache
+          # - type=registry,ref=docker.io/yurasdockers/kuberapi-cache
+          - --opt
+          - platform=linux/arm64,linux/amd64
+          - --output
+          - type=image,name=docker.io/{{inputs.parameters.buildArtifact}},push={{workflow.parameters.push}}
+        securityContext:
+          privileged: true
