@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: kuber-api-app
+  name: kuber-dashboard-dev
   namespace: argocd
 spec:
   destination:
