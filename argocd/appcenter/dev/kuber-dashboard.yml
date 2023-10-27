@@ -9,7 +9,14 @@ spec:
     server: https://kubernetes.default.svc
   project: default
   source:
-    path: deploy
+    repoURL: https://github.com/yura-kutsiy/hub
+    targetRevision: "dev"
+    path: deploy/chart
+    helm:
+      releaseName: dashboard
+      valueFiles: [dev.yml]
+  source:
+    path: deploy/chart
     repoURL: https://github.com/yura-kutsiy/hub
     targetRevision: "dev"
   syncPolicy:
