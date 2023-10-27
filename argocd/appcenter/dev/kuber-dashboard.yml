@@ -15,10 +15,6 @@ spec:
     helm:
       releaseName: dashboard
       valueFiles: [dev.yml]
-  source:
-    path: deploy/chart
-    repoURL: https://github.com/yura-kutsiy/hub
-    targetRevision: "dev"
   syncPolicy:
     automated:
       selfHeal: false
